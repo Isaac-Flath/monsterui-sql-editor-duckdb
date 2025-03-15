@@ -20,7 +20,7 @@ from monsterui.all import *
 load_dotenv()
 
 # Define database path (relative to parent directory where analytics.duckdb is located)
-DB_PATH = os.getenv("DUCKDB_PATH", "../analytics.duckdb")
+DB_PATH = os.getenv("DUCKDB_PATH", "../duckdb-demo.duckdb")
 
 # Global connection object
 _db_connection = None
