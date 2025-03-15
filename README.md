@@ -9,6 +9,7 @@ A powerful interactive SQL editor for DuckDB databases with a modern web interfa
 - **Connect to DuckDB Databases**: Easily connect to any DuckDB database file
 - **Interactive SQL Editor**: Write and execute SQL queries with syntax highlighting
 - **Table Explorer**: Browse tables and view their schemas
+- **JSON Browsing**: Explore and navigate JSON data with an interactive tree viewer
 - **Query Results**: View query results in a formatted table with pagination
 - **Natural Language to SQL**: Translate natural language queries to SQL using OpenAI (optional)
 - **Modern UI**: Clean, responsive interface built with MonsterUI components
@@ -60,7 +61,8 @@ The repository includes a sample DuckDB database (`duckdb-demo.duckdb`) with exa
 3. **View Table Schema**: Click on a table name to see its structure and sample data
 4. **Write Queries**: Use the SQL editor to write your queries
 5. **Execute Queries**: Click the "Run" button to execute the current query
-6. **Natural Language**: Use the "AI Query" feature to convert natural language to SQL (requires OpenAI API key)
+6. **Explore JSON Data**: View and navigate JSON columns with the interactive tree viewer
+7. **Natural Language**: Use the "AI Query" feature to convert natural language to SQL (requires OpenAI API key)
 
 ## Development
 
