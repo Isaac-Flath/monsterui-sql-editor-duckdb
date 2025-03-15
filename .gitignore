@@ -1,6 +1,7 @@
 # Ignore all dot files and dot directories
 .*
 !.gitignore
+!.env.example
 
 # Python
 __pycache__/
@@ -34,13 +35,13 @@ poetry.lock
 
 # DuckDB specific
 *.duckdb
+!duckdb-demo.duckdb
 *.duckdb.wal
 *.duckdb-shm
 *.duckdb-wal
 
 # Environment variables
 .env
-.env.*
 
 # Operating system files
 .DS_Store
