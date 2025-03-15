@@ -1,0 +1,70 @@
+# Ignore all dot files and dot directories
+.*
+!.gitignore
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+ENV/
+
+# Poetry
+poetry.lock
+.python-version
+
+# DuckDB specific
+*.duckdb
+*.duckdb.wal
+*.duckdb-shm
+*.duckdb-wal
+
+# Environment variables
+.env
+.env.*
+
+# Operating system files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vs/
+.cursor/
+.specstory/
+
+# Testing and profiling
+.coverage
+htmlcov/
+.pytest_cache/
+.tox/
+profile_default/
+ipython_config.py
+.hypothesis/
+
+# Logs
+logs/
+*.log
+
+# Application specific
+node_modules/
+tmp/ 

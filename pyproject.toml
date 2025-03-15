@@ -1,0 +1,23 @@
+[project]
+name = "duckdb-sql-editor"
+version = "0.1.0"
+description = "SQL Editor for DuckDB with a web interface"
+authors = [
+    {name = "User"}
+]
+requires-python = "^3.10"
+dependencies = [
+    "python-fasthtml (>=0.12.4,<0.13.0)",
+    "duckdb (>=1.2.1,<2.0.0)",
+    "python-dotenv (>=1.0.1,<2.0.0)",
+    "monsterui (>=1.0.11,<2.0.0)",
+    "requests (>=2.32.3,<3.0.0)"
+]
+
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.poetry]
+package-mode = false
