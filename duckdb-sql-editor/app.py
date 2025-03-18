@@ -5,107 +5,44 @@
 DuckDB SQL Editor with FastHTML and MonsterUI
 """
 
-import os
-import json
-import duckdb
-import requests
-import atexit
+import os, json, duckdb, requests, atexit
 from pathlib import Path
 from dotenv import load_dotenv
 from fasthtml import serve
 from fasthtml.common import *
 from monsterui.all import *
+from db import DB_PATH, db, DatabaseManager
 
 # Load environment variables
 load_dotenv()
 
-# Define database path (relative to parent directory where analytics.duckdb is located)
-DB_PATH = os.getenv("DUCKDB_PATH", "../duckdb-demo.duckdb")
-
-# Global connection object
-_db_connection = None
-
-def get_connection():
-    """Get a connection to the DuckDB database using a singleton pattern"""
-    global _db_connection
-    
-    try:
-        if _db_connection is None:
-            db_path = Path(DB_PATH).resolve()
-            if not db_path.exists():
-                raise FileNotFoundError(f"Database file not found: {db_path}")
-            
-            # Connect to the database (read-only mode)
-            print(f"Opening new database connection to {db_path} (singleton)")
-            _db_connection = duckdb.connect(str(db_path), read_only=True)
-        
-        return _db_connection
-    except Exception as e:
-        print(f"Error connecting to database: {e}")
-        raise
-
-def reset_with_new_db(new_db_path):
-    """Reset the connection with a new database file path"""
-    global _db_connection, DB_PATH
-    
-    print(f"Changing database to: {new_db_path}")
-    try:
-        # Close existing connection if it exists
-        if _db_connection is not None:
-            try:
-                _db_connection.close()
-            except Exception as e:
-                print(f"Error closing existing connection: {e}")
-            finally:
-                _db_connection = None
-        
-        # Update the global DB_PATH
-        DB_PATH = new_db_path
-        
-        # Validate the new path
-        db_path = Path(DB_PATH).resolve()
-        if not db_path.exists():
-            raise FileNotFoundError(f"Database file not found: {db_path}")
-        
-        # Create a new connection
-        print(f"Creating new database connection to {db_path}")
-        _db_connection = duckdb.connect(str(db_path), read_only=True)
-        
-        # Test the connection
-        _db_connection.execute("SELECT 1").fetchall()
-        print("Connection change successful")
-        return True, None
-    except Exception as e:
-        error_msg = f"Failed to change database: {e}"
-        print(error_msg)
-        _db_connection = None
-        return False, error_msg
+db = DatabaseManager()
 
 def get_table_names():
     """Get a list of table names from the database"""
-    conn = get_connection()
+    db.connect(DB_PATH)
     try:
         # Query for all tables
-        tables = conn.execute("SHOW TABLES").fetchall()
+        tables = db.connection.execute("SHOW TABLES").fetchall()
         return [table[0] for table in tables]
     except Exception as e:
         print(f"Error fetching table names: {e}")
         return []
-    # Don't close the connection here anymore
+
+
 
 def get_table_schema(table_name):
     """Get the schema for a specific table"""
-    conn = get_connection()
+    db.connect(DB_PATH)
     try:
         # Query for table schema
         print(f"Fetching schema for table: {table_name}")
-        schema = conn.execute(f"DESCRIBE {table_name}").fetchall()
+        schema = db.connection.execute(f"DESCRIBE {table_name}").fetchall()
         print(f"Schema for {table_name}: {len(schema)} columns")
         return schema
     except Exception as e:
         print(f"Error fetching schema for table {table_name}: {e}")
         return []
-    # Don't close the connection here anymore
 
 def reset_connection():
     """Reset the database connection if it becomes unresponsive"""
@@ -137,16 +74,16 @@ def reset_connection():
 
 def execute_query(query):
     """Execute a SQL query and return the results"""
-    conn = get_connection()
+    db.connect(DB_PATH)
     try:
         print(f"Executing query: {query[:100]}...")
         
         # Execute the query
-        result = conn.execute(query).fetchall()
+        result = db.connection.execute(query).fetchall()
         # Get column names
         columns = []
-        if conn.description is not None:
-            columns = [col[0] for col in conn.description]
+        if db.connection.description is not None:
+            columns = [col[0] for col in db.connection.description]
         print(f"Query executed successfully, returned {len(result)} rows")
         return {"columns": columns, "data": result}
     except Exception as e:
@@ -158,12 +95,12 @@ def execute_query(query):
             if reset_connection():
                 # Retry the query once with the new connection
                 try:
-                    conn = get_connection()
+                    db.connect(DB_PATH)
                     print(f"Retrying query after connection reset...")
-                    result = conn.execute(query).fetchall()
+                    result = db.connection.execute(query).fetchall()
                     columns = []
-                    if conn.description is not None:
-                        columns = [col[0] for col in conn.description]
+                    if db.connection.description is not None:
+                        columns = [col[0] for col in db.connection.description]
                     print(f"Retry successful, returned {len(result)} rows")
                     return {"columns": columns, "data": result}
                 except Exception as retry_error:
