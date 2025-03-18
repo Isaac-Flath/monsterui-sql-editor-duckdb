@@ -18,31 +18,36 @@ load_dotenv()
 
 db = DatabaseManager()
 
+def with_db_connection(default_value=None):
+    """Decorator to handle database connections and error handling
+    Args:
+        default_value: Value to return if operation fails (default: None)
+    """
+    def decorator(func):
+        def wrapper(*args, **kwargs):
+            db.connect(DB_PATH)
+            try:
+                result = func(*args, **kwargs)
+                return result
+            except Exception as e:
+                print(f"Error in {func.__name__}: {e}")
+                return default_value
+        return wrapper
+    return decorator
+
+@with_db_connection(default_value=[])
 def get_table_names():
     """Get a list of table names from the database"""
-    db.connect(DB_PATH)
-    try:
-        # Query for all tables
-        tables = db.connection.execute("SHOW TABLES").fetchall()
-        return [table[0] for table in tables]
-    except Exception as e:
-        print(f"Error fetching table names: {e}")
-        return []
+    tables = db.connection.execute("SHOW TABLES").fetchall()
+    return [table[0] for table in tables]
 
-
-
+@with_db_connection(default_value=[])
 def get_table_schema(table_name):
     """Get the schema for a specific table"""
-    db.connect(DB_PATH)
-    try:
-        # Query for table schema
-        print(f"Fetching schema for table: {table_name}")
-        schema = db.connection.execute(f"DESCRIBE {table_name}").fetchall()
-        print(f"Schema for {table_name}: {len(schema)} columns")
-        return schema
-    except Exception as e:
-        print(f"Error fetching schema for table {table_name}: {e}")
-        return []
+    print(f"Fetching schema for table: {table_name}")
+    schema = db.connection.execute(f"DESCRIBE {table_name}").fetchall()
+    print(f"Schema for {table_name}: {len(schema)} columns")
+    return schema
 
 def reset_connection():
     """Reset the database connection if it becomes unresponsive"""
@@ -51,12 +56,9 @@ def reset_connection():
     print("Resetting database connection...")
     try:
         if _db_connection is not None:
-            try:
-                _db_connection.close()
-            except Exception as e:
-                print(f"Error closing existing connection: {e}")
-            finally:
-                _db_connection = None
+            try: _db_connection.close()
+            except Exception as e: print(f"Error closing existing connection: {e}")
+            finally: _db_connection = None
         
         # Create a new connection
         db_path = Path(DB_PATH).resolve()
@@ -74,42 +76,43 @@ def reset_connection():
 
 def execute_query(query):
     """Execute a SQL query and return the results"""
+    def get_results(connection):
+        """Helper to execute query and get results with column names"""
+        result = connection.execute(query).fetchall()
+        columns = []
+        if connection.description is not None:
+            columns = [col[0] for col in connection.description]
+        return {"columns": columns, "data": result}
+
     db.connect(DB_PATH)
     try:
         print(f"Executing query: {query[:100]}...")
+        return get_results(db.connection)
+
+    except (duckdb.ConnectionException, duckdb.IOException) as conn_error:
+        # Handle connection-specific issues
+        print(f"Connection error: {conn_error}")
+        print("Attempting to reset connection...")
         
-        # Execute the query
-        result = db.connection.execute(query).fetchall()
-        # Get column names
-        columns = []
-        if db.connection.description is not None:
-            columns = [col[0] for col in db.connection.description]
-        print(f"Query executed successfully, returned {len(result)} rows")
-        return {"columns": columns, "data": result}
-    except Exception as e:
-        print(f"Error executing query: {e}")
-        
-        # If there's a connection error, try to reset the connection
-        if "connection" in str(e).lower() or "database" in str(e).lower():
-            print("Connection issue detected, attempting to reset...")
-            if reset_connection():
-                # Retry the query once with the new connection
-                try:
-                    db.connect(DB_PATH)
-                    print(f"Retrying query after connection reset...")
-                    result = db.connection.execute(query).fetchall()
-                    columns = []
-                    if db.connection.description is not None:
-                        columns = [col[0] for col in db.connection.description]
-                    print(f"Retry successful, returned {len(result)} rows")
-                    return {"columns": columns, "data": result}
-                except Exception as retry_error:
-                    print(f"Retry failed: {retry_error}")
-                    return {"error": f"Query failed after connection reset: {retry_error}", 
-                            "columns": [], "data": []}
-        
-        return {"error": str(e), "columns": [], "data": []}
-    # Don't close the connection here anymore
+        if reset_connection():
+            try:
+                db.connect(DB_PATH)
+                print("Retrying query after connection reset...")
+                return get_results(db.connection)
+            except duckdb.Error as retry_error:
+                print(f"Retry failed: {retry_error}")
+                return {"error": f"Query failed after connection reset: {retry_error}", "columns": [], "data": []}
+        return {"error": f"Database connection error: {conn_error}", "columns": [], "data": []}
+
+    except duckdb.Error as query_error:
+        # Handle query-specific errors (syntax errors, etc.)
+        print(f"Query error: {query_error}")
+        return {"error": str(query_error), "columns": [], "data": []}
+
+    except Exception as unexpected_error:
+        # Handle any unexpected errors not covered by DuckDB exceptions
+        print(f"Unexpected error: {unexpected_error}")
+        return {"error": f"An unexpected error occurred: {unexpected_error}", "columns": [], "data": []}
 
 # Initialize the app with MonsterUI theme
 app, rt = fast_app(hdrs=Theme.blue.headers())
