@@ -1,5 +1,5 @@
- // Line number functionality
- function updateLineNumbers() {
+// Line number functionality
+function updateLineNumbers() {
     const editor = document.getElementById('sql-query');
     const lineNumbers = document.getElementById('line-numbers');
     if (!editor || !lineNumbers) return;

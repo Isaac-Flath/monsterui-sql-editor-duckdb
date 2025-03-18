@@ -130,24 +130,13 @@ def index():
     
     return Container(
             # Header with improved styling
-            Div(
-                Div(
-                    H1("DuckDB SQL Editor", cls="text-2xl font-bold"),
-                    
-                    cls="flex-grow"
-                ),
-                Div(
-                    P(f"Connected to: {DB_PATH}", cls="text-sm text-gray-500"),
-                    P(f"Available Tables: {len(tables)}", cls="text-sm text-gray-500"),
-                    Button(
-                        "Change Database", 
-                        cls=ButtonT.secondary + " text-xs px-2 py-1 mt-1",
-                        onclick="console.log('Database button clicked'); openModal();"
-                    ),
-                    cls="text-right header-actions"
-                ),
-                cls="flex justify-between items-center py-4 border-b border-gray-200 mb-6"
-            ),
+            DivFullySpaced(
+                H3("DuckDB SQL Editor"),
+                DivRAligned(
+                    Subtitle(f"Connected to: {DB_PATH}"),
+                    Subtitle(f"Available Tables: {len(tables)}"),
+                    Button("Change Database", cls=ButtonT.secondary, data_uk_toggle="#change-database-modal")),
+                cls='p-4 mb-4'),
             
             # Main content area wrapped in a main tag
             Main(
@@ -305,274 +294,17 @@ def index():
                             UkIconLink("database", href="https://duckdb.org/docs/")),
                 cls="p-4 footer"),
             
-            # Modal backdrop (separate element)
-            Div(
-                id="modalBackdrop",
-                cls="modal-backdrop",
-                onclick="closeModal()"
-            ),
-            
-            # Database selection modal container - simplified
-            Div(
-                id="modalContainer",
-                cls="modal-container",
-                style="background-color: white; border: 2px solid black;"
-            ),
-            
-            
-            # Modal script
-            Script("""
-                // Open the modal
-                function openModal() {
-                    console.log('Opening modal');
-                    const backdrop = document.getElementById('modalBackdrop');
-                    const container = document.getElementById('modalContainer');
+                Modal(
+                    H3("Connect to a DuckDB Database", cls="text-lg font-semibold"),
+                    ModalCloseButton(),
+                    UploadZone(DivCentered(Span("Upload Zone"), UkIcon("upload")), id='db_file', name='db_file', accept=".duckdb,.db"),
+                    Button("Connect", type="submit", id="upload-btn", cls=ButtonT.primary),
+                    id='change-database-modal'),
                     
-                    if (backdrop && container) {
-                        console.log('Modal elements found, showing modal');
-                        
-                        // Force styles directly
-                        backdrop.style.position = 'fixed';
-                        backdrop.style.top = '0';
-                        backdrop.style.left = '0';
-                        backdrop.style.width = '100%';
-                        backdrop.style.height = '100%';
-                        backdrop.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-                        backdrop.style.zIndex = '9998';
-                        backdrop.style.display = 'block';
-                        
-                        container.style.position = 'fixed';
-                        container.style.top = '50%';
-                        container.style.left = '50%';
-                        container.style.transform = 'translate(-50%, -50%)';
-                        container.style.backgroundColor = 'white';
-                        container.style.border = '1px solid #ccc';
-                        container.style.borderRadius = '8px';
-                        container.style.boxShadow = '0 4px 8px rgba(0, 0, 0, 0.1)';
-                        container.style.zIndex = '9999';
-                        container.style.width = '90%';
-                        container.style.maxWidth = '500px';
-                        container.style.minHeight = '300px'; 
-                        container.style.maxHeight = '90vh';
-                        container.style.overflowY = 'auto';
-                        container.style.display = 'block';
-                        container.style.padding = '20px';
-                        
-                        // Create modal content using innerHTML to ensure it's rendered
-                        container.innerHTML = `
-                            <div class="modal-header">
-                                <h3 class="text-lg font-semibold">Connect to a DuckDB Database</h3>
-                                <button class="text-gray-400 hover:text-gray-500 text-xl font-bold" onclick="closeModal()">×</button>
-                            </div>
-                            
-                            <div class="modal-body">                                
-                                <form id="upload-form" class="mb-4">
-                                    <div class="form-group mb-3">
-                                        <label for="db_file" class="block mb-1 font-medium">Choose File:</label>
-                                        <input type="file" id="db_file" name="db_file" accept=".duckdb,.db" class="w-full px-3 py-2 border rounded">
-                                    </div>
-                                    
-                                    <div class="flex justify-end mt-4">
-                                        <button type="submit" id="upload-btn" class="bg-blue-500 hover:bg-blue-600 text-white px-4 py-2 rounded"
-                                            hx-post="/change-database" hx-target="#result-area" hx-swap="innerHTML" hx-encoding="multipart/form-data">Connect</button>
-                                    </div>
-                                </form>
-                                <div id="result-area" class="mt-2"></div>
-                            </div>
-                        `;
-                        
-                        // Add htmx event handlers after content is injected
-                        setupFormHandlers();
-                        
-                        document.body.style.overflow = 'hidden'; // Prevent scrolling
-                        
-                        // Debug info
-                        console.log('Backdrop z-index:', getComputedStyle(backdrop).zIndex);
-                        console.log('Modal z-index:', getComputedStyle(container).zIndex);
-                        console.log('Backdrop display:', getComputedStyle(backdrop).display);
-                        console.log('Modal display:', getComputedStyle(container).display);
-                        console.log('Modal background-color:', getComputedStyle(container).backgroundColor);
-                        console.log('Modal dimensions:', container.offsetWidth, 'x', container.offsetHeight);
-                        console.log('Modal position:', container.offsetLeft, ',', container.offsetTop);
-                        console.log('Modal has children:', container.children.length);
-                    } else {
-                        console.error('Modal elements not found!', {
-                            backdrop: backdrop,
-                            container: container
-                        });
-                    }
-                }
-                
-                // Close the modal
-                function closeModal() {
-                    console.log('Closing modal');
-                    const backdrop = document.getElementById('modalBackdrop');
-                    const container = document.getElementById('modalContainer');
-                    
-                    // Check if we should reload the page due to database change
-                    const resultArea = document.getElementById('result-area');
-                    const shouldReload = resultArea && 
-                        resultArea.textContent && 
-                        resultArea.textContent.includes('Successfully connected to');
-                    
-                    if (backdrop && container) {
-                        backdrop.style.display = 'none';
-                        container.style.display = 'none';
-                        document.body.style.overflow = ''; // Allow scrolling
-                    }
-                    
-                    // Clear any previous messages
-                    if (resultArea) {
-                        resultArea.innerHTML = '';
-                    }
-                    
-                    // If database was changed successfully, reload the page
-                    if (shouldReload) {
-                        console.log('Database changed successfully. Reloading page...');
-                        window.location.reload();
-                    }
-                }
-                
-                // Initialize modal when the document is loaded
-                document.addEventListener('DOMContentLoaded', function() {
-                    console.log('Initializing modal');
-                    const backdrop = document.getElementById('modalBackdrop');
-                    const container = document.getElementById('modalContainer');
-                    
-                    if (backdrop && container) {
-                        console.log('Modal elements found during initialization');
-                        // Ensure z-index is set correctly
-                        backdrop.style.zIndex = '9998';
-                        container.style.zIndex = '9999';
-                    } else {
-                        console.error('Modal elements not found during initialization!');
-                    }
-                });
-                
-                // Setup htmx form handlers
-                function setupFormHandlers() {
-                    const uploadForm = document.getElementById('upload-form');
-                    if (uploadForm) {
-                        console.log('Found upload form, adding event listener');
-                        uploadForm.addEventListener('submit', function(e) {
-                            e.preventDefault();
-                            
-                            // Show loading state
-                            const uploadBtn = document.getElementById('upload-btn');
-                            if (uploadBtn) {
-                                uploadBtn.disabled = true;
-                                uploadBtn.innerHTML = 'Connecting...';
-                            }
-                            
-                            const formData = new FormData(uploadForm);
-                            const fileInput = document.getElementById('db_file');
-                            
-                            // Validate file extension
-                            if (fileInput && fileInput.files.length > 0) {
-                                const filename = fileInput.files[0].name;
-                                if (!filename.endsWith('.duckdb') && !filename.endsWith('.db')) {
-                                    document.getElementById('result-area').innerHTML = `
-                                        <div class="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                                            <strong>Error!</strong>
-                                            <p>Please select a valid .duckdb or .db file</p>
-                                        </div>
-                                    `;
-                                    if (uploadBtn) {
-                                        uploadBtn.disabled = false;                                    }
-                                    return;
-                                }
-                            }
-                            
-                            fetch('/change-database', {
-                                method: 'POST',
-                                body: formData
-                            })
-                            .then(response => response.json())
-                            .then(data => {
-                                const resultArea = document.getElementById('result-area');
-                                if (data.success) {
-                                    resultArea.innerHTML = `
-                                        <div class="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded relative">
-                                            <strong>Success!</strong>
-                                            <p>${data.message}</p>
-                                            <p class="mt-2">Reloading page in 2 seconds...</p>
-                                        </div>
-                                    `;
-                                    // Automatically reload after successful connection
-                                    setTimeout(() => window.location.reload(), 2000);
-                                } else {
-                                    resultArea.innerHTML = `
-                                        <div class="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                                            <strong>Error!</strong>
-                                            <p>${data.message}</p>
-                                        </div>
-                                    `;
-                                    if (uploadBtn) {
-                                        uploadBtn.disabled = false;
-                                    }
-                                }
-                            })
-                            .catch(error => {
-                                document.getElementById('result-area').innerHTML = `
-                                    <div class="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                                        <strong>Error!</strong>
-                                        <p>An unexpected error occurred</p>
-                                    </div>
-                                `;
-                                if (uploadBtn) {
-                                    uploadBtn.disabled = false;
-                                    uploadBtn.innerHTML = 'Upload and Connect';
-                                }
-                            });
-                        });
-                    }
-                }
-                
-                // Handle response from database change
-                document.body.addEventListener('htmx:afterRequest', function(evt) {
-                    if (evt.detail.target && evt.detail.target.id === 'result-area') {
-                        if (evt.detail.successful) {
-                            try {
-                                const response = JSON.parse(evt.detail.xhr.response);
-                                const resultArea = document.getElementById('result-area');
-                                
-                                if (response.success) {
-                                    resultArea.innerHTML = `
-                                        <div class="bg-green-50 border border-green-400 text-green-700 px-4 py-3 rounded relative">
-                                            <strong>Success!</strong>
-                                            <p>${response.message}</p>
-                                            <p class="mt-2">
-                                                <button onclick="reloadPage()" class="text-green-700 underline">
-                                                    Reload the page to use the new database
-                                                </button>
-                                            </p>
-                                        </div>
-                                    `;
-                                } else {
-                                    resultArea.innerHTML = `
-                                        <div class="bg-red-50 border border-red-400 text-red-700 px-4 py-3 rounded relative">
-                                            <strong>Error!</strong>
-                                            <p>${response.message}</p>
-                                        </div>
-                                    `;
-                                }
-                            } catch (e) {
-                                // If not JSON, display the raw response
-                                document.getElementById('result-area').innerHTML = evt.detail.xhr.response;
-                            }
-                        }
-                    }
-                });
-                
-                function reloadPage() {
-                    window.location.reload();
-                }
-            """),
-            
-            cls="mx-auto px-4 sm:px-6 lg:px-8 max-w-full w-[98%] container"
-        )
+            cls="mx-auto px-4 sm:px-6 lg:px-8 max-w-full w-[98%] container")
     
     
+
 def get_table_schema_component(table_name):
     """Generate a component showing the schema for a table"""
     if not table_name:
