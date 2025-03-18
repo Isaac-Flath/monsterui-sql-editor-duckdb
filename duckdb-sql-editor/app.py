@@ -11,12 +11,17 @@ from dotenv import load_dotenv
 from fasthtml import serve
 from fasthtml.common import *
 from monsterui.all import *
-from db import DB_PATH, db, DatabaseManager
-
+from db import DB_PATH, db, DatabaseManager, cleanup_resources
+import json
+import datetime
+import time
 # Load environment variables
 load_dotenv()
 
 db = DatabaseManager()
+
+def ErrorDiv(*args, **kwargs):
+    return Div(*args, cls="p-4 bg-red-50 text-red-700 rounded-lg", **kwargs)
 
 def with_db_connection(default_value=None):
     """Decorator to handle database connections and error handling
@@ -49,31 +54,6 @@ def get_table_schema(table_name):
     print(f"Schema for {table_name}: {len(schema)} columns")
     return schema
 
-def reset_connection():
-    """Reset the database connection if it becomes unresponsive"""
-    global _db_connection
-    
-    print("Resetting database connection...")
-    try:
-        if _db_connection is not None:
-            try: _db_connection.close()
-            except Exception as e: print(f"Error closing existing connection: {e}")
-            finally: _db_connection = None
-        
-        # Create a new connection
-        db_path = Path(DB_PATH).resolve()
-        print(f"Creating new database connection to {db_path}")
-        _db_connection = duckdb.connect(str(db_path), read_only=True)
-        
-        # Test the connection
-        _db_connection.execute("SELECT 1").fetchall()
-        print("Connection reset successful")
-        return True
-    except Exception as e:
-        print(f"Failed to reset connection: {e}")
-        _db_connection = None
-        return False
-
 def execute_query(query):
     """Execute a SQL query and return the results"""
     def get_results(connection):
@@ -94,7 +74,7 @@ def execute_query(query):
         print(f"Connection error: {conn_error}")
         print("Attempting to reset connection...")
         
-        if reset_connection():
+        if db.reset_connection():
             try:
                 db.connect(DB_PATH)
                 print("Retrying query after connection reset...")
@@ -401,14 +381,7 @@ async def run_query(request):
         
         if not query.strip():
             print("Empty query received, returning error")
-            return Div(
-                Div(
-                    Strong("Error: ", cls="font-bold"),
-                    Span("Please enter a query"),
-                    cls="p-4 bg-red-50 text-red-700 rounded-lg flex items-center"
-                ),
-                cls="my-4 single-query-result"
-            )
+            return ErrorDiv(Strong("Error: "), Span("Please enter a query"))
         
         # Start timer for query execution
         import time
@@ -429,60 +402,10 @@ async def run_query(request):
         escaped_query = json.dumps(query)
         
         # JavaScript to add query to history and ensure form functionality persists
-        history_script = Script(f"""
-            // Add this query to history
-            console.log("Adding query to history: {timestamp}");
-            addQueryToHistory({escaped_query}, "{timestamp}");
-            
-            // CRITICAL: Re-initialize the form binding
-            (function() {{
-                console.log("Reinitializing form handlers");
-                
-                // Wait a moment for HTMX to complete its work
-                setTimeout(function() {{
-                    const form = document.querySelector('form[hx-post="/execute-query"]');
-                    if (form) {{
-                        console.log("Form found, ensuring htmx binding");
-                        
-                        // First, remove any existing event listeners by cloning the form
-                        const parent = form.parentNode;
-                        const clone = form.cloneNode(true);
-                        parent.replaceChild(clone, form);
-                        
-                        // Re-process with HTMX
-                        if (typeof htmx !== 'undefined') {{
-                            console.log("Processing form with HTMX");
-                            htmx.process(clone);
-                        }}
-                    }} else {{
-                        console.error("Form not found!");
-                    }}
-                    
-                    // Extra debug info
-                    console.log("Form state:", {{
-                        "formExists": !!document.querySelector('form[hx-post="/execute-query"]'),
-                        "htmxLoaded": typeof htmx !== 'undefined'
-                    }});
-                    
-                    // Use our more comprehensive page reinitialization
-                    if (typeof reinitializePage === 'function') {{
-                        reinitializePage();
-                    }}
-                }}, 10);
-            }})();
-        """)
         
         if "error" in results:
             print(f"Query error: {results['error']}")
-            return Div(
-                history_script,
-                Div(
-                    Strong("SQL Error: ", cls="font-bold"),
-                    P(results["error"], cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
-                    cls="p-4 bg-red-50 text-red-700 rounded-lg"
-                ),
-                cls="single-query-result"
-            )
+            return Div(ErrorDiv(Strong("SQL Error: "), P(results["error"])), cls="single-query-result")
         
         # Limit display to 100 rows for performance
         display_data = results["data"][:100]
@@ -490,16 +413,8 @@ async def run_query(request):
         
         if not display_data:
             print("Query returned no results")
-            return Div(
-                history_script,
-                Div(
-                    Strong("Query completed ", cls="font-bold"),
-                    Span(f"in {execution_time:.2f}s"),
-                    P("No results returned", cls="text-sm"),
-                    cls="p-4 bg-green-50 text-green-700 rounded-lg"
-                ),
-                cls="single-query-result"
-            )
+            return Div(Strong("Query completed "), Span(f"in {execution_time:.2f}s"), P("No results returned", cls="text-sm"), cls="single-query-result")
+
             
         print(f"Processing {len(display_data)} rows for display")
         
@@ -554,7 +469,6 @@ async def run_query(request):
         
         # Build response
         response = Div(
-            history_script,
             Div(
                 Div(
                     Strong("Query successful ", cls="font-bold"),
@@ -595,13 +509,11 @@ async def run_query(request):
         
         # Return a user-friendly error message
         return Div(
-            Div(
-                Strong("Application Error: ", cls="font-bold"),
-                P(f"An unexpected error occurred: {str(e)}", 
-                  cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
-                cls="p-4 bg-red-50 text-red-700 rounded-lg"
-            ),
-            cls="my-4 single-query-result"
+            ErrorDiv(
+                Strong("Application Error: "),
+                P(f"An unexpected error occurred: {str(e)}"),
+                cls="my-4 single-query-result"
+            )
         )
 
 @rt('/debug', methods=['GET', 'POST'])
@@ -631,7 +543,7 @@ async def debug(request):
 @rt('/reset-connection', methods=['GET'])
 async def reset_connection_endpoint(request):
     """Endpoint to reset the database connection"""
-    success = reset_connection()
+    success = db.reset_connection()
     
     if success:
         return Div(
@@ -680,7 +592,7 @@ async def change_database_endpoint(request):
                 f.write(await file.read())
             
             # Try to connect to the new database
-            success, error = reset_with_new_db(str(file_path))
+            success, error = db.reset_with_new_db(str(file_path))
             if success:
                 return {"success": True, "message": f"Successfully connected to {file.filename}"}
             else:
@@ -694,28 +606,6 @@ async def change_database_endpoint(request):
         print(f"Error in change-database: {e}")
         return {"success": False, "message": f"An error occurred: {str(e)}"}
 
-# Function to clean up resources
-def cleanup_resources():
-    """Close database connection and clean up resources"""
-    global _db_connection
-    if _db_connection is not None:
-        print("Closing database connection on shutdown")
-        try:
-            _db_connection.close()
-            _db_connection = None
-        except Exception as e:
-            print(f"Error closing database connection: {e}")
-    
-    # Clean up temporary database directory
-    try:
-        temp_dir = Path("./temp_db")
-        if temp_dir.exists():
-            import shutil
-            print("Cleaning up temporary database directory")
-            shutil.rmtree(temp_dir)
-    except Exception as e:
-        print(f"Error cleaning up temporary files: {e}")
-
 def get_database_schema_info():
     """Get comprehensive schema information for all tables to inform AI translation"""
     tables = get_table_names()
@@ -724,12 +614,7 @@ def get_database_schema_info():
     # Process all tables
     for table in tables:
         try:
-            # Get schema
             schema = get_table_schema(table)
-            
-            # Extract column names
-            column_names = [col[0] for col in schema]
-            
             # Initialize table info with columns
             schema_info[table] = {
                 "columns": [{"name": col[0], "type": col[1], "nullable": col[3]} for col in schema],
@@ -851,23 +736,8 @@ Return ONLY the SQL query NEVER ANYTHING ELSE like explanations or markdown form
         result = response.json()
         sql_query = result["choices"][0]["message"]["content"].strip()
         
-        # Strip any markdown code formatting (```SQL, ```, etc.)
-        # Remove opening code block markers like ```sql, ```SQL, or just ```
-        if sql_query.startswith("```"):
-            # Find the first line break which would be after the ```sql or similar
-            first_line_break = sql_query.find('\n')
-            if first_line_break != -1:
-                sql_query = sql_query[first_line_break+1:]
-            else:
-                # If no line break, just remove the first three backticks
-                sql_query = sql_query[3:]
-        
-        # Remove closing code block markers
-        if sql_query.endswith("```"):
-            sql_query = sql_query[:-3]
-        
-        # Final trimming to remove any extra whitespace
-        sql_query = sql_query.strip()
+        # Remove markdown code block formatting
+        sql_query = sql_query.strip('`').removeprefix('sql\n').strip()
         
         # Log the generated SQL query
         print("\n=== GENERATED SQL QUERY ===")
@@ -883,33 +753,21 @@ Return ONLY the SQL query NEVER ANYTHING ELSE like explanations or markdown form
         return {"error": f"Translation error: {str(e)}"}
 
 @rt('/translate-query', methods=['POST'])
-async def translate_query_endpoint(request):
+async def translate_query_endpoint(query:str):
     """Endpoint to translate natural language to SQL and automatically execute it"""
     print("==== Starting translate_query endpoint ====")
     
     try:
         # Get form data
-        form_data = await request.form()
-        natural_language_query = form_data.get('query', '')
-        print(f"Received natural language query: {natural_language_query[:100]}...")
-        
-        if not natural_language_query.strip():
-            return Div(
-                Strong("Error: ", cls="font-bold"),
-                Span("Please enter a query"),
-                cls="p-4 bg-red-50 text-red-700 rounded-lg flex items-center"
-            )
-        
-        # Translate the query
-        print("Translating query...")
+        natural_language_query = query
+        print(f"Translating natural language query: {natural_language_query[:100]}...")
         result = translate_natural_language_to_sql(natural_language_query)
         
         if "error" in result:
             print(f"Translation error: {result['error']}")
-            return Div(
-                Strong("Translation Error: ", cls="font-bold"),
-                P(result["error"], cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
-                cls="p-4 bg-red-50 text-red-700 rounded-lg"
+            return ErrorDiv(
+                Strong("Translation Error: "),
+                P(result["error"]),
             )
         
         # Get the SQL query and add the original natural language as a comment
@@ -917,80 +775,20 @@ async def translate_query_endpoint(request):
         print(f"Successfully translated to SQL: {sql_query[:100]}...")
         
         # Update the SQL editor with the translated query
-        import json
-        sql_query_escaped = json.dumps(sql_query)
+        
         
         # Execute the query (use the actual SQL part, not the comment)
         print("Automatically executing the translated query...")
         execution_results = execute_query(result["sql"])
         
         # Generate timestamp for query history
-        import datetime
-        import time
         start_time = time.time()
-        timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         execution_time = time.time() - start_time
-        
-        # JavaScript to add query to history
-        history_script = Script(f"""
-            // Update the SQL editor with the translated query
-            document.getElementById('sql-query').value = {sql_query_escaped};
-            updateLineNumbers();
-            
-            // Add this query to history
-            console.log("Adding translated query to history: {timestamp}");
-            addQueryToHistory({sql_query_escaped}, "{timestamp}");
-            
-            // CRITICAL: Re-initialize the form binding
-            (function() {{
-                console.log("Reinitializing form handlers");
-                
-                // Wait a moment for HTMX to complete its work
-                setTimeout(function() {{
-                    const form = document.querySelector('form[hx-post="/execute-query"]');
-                    if (form) {{
-                        console.log("Form found, ensuring htmx binding");
-                        
-                        // First, remove any existing event listeners by cloning the form
-                        const parent = form.parentNode;
-                        const clone = form.cloneNode(true);
-                        parent.replaceChild(clone, form);
-                        
-                        // Re-process with HTMX
-                        if (typeof htmx !== 'undefined') {{
-                            console.log("Processing form with HTMX");
-                            htmx.process(clone);
-                        }}
-                    }} else {{
-                        console.error("Form not found!");
-                    }}
-                    
-                    // Extra debug info
-                    console.log("Form state:", {{
-                        "formExists": !!document.querySelector('form[hx-post="/execute-query"]'),
-                        "htmxLoaded": typeof htmx !== 'undefined'
-                    }});
-                    
-                    // Use our more comprehensive page reinitialization
-                    if (typeof reinitializePage === 'function') {{
-                        reinitializePage();
-                    }}
-                }}, 10);
-            }})();
-        """)
-        
+       
         # Display error if there was a problem executing the query
         if "error" in execution_results:
             print(f"Query execution error: {execution_results['error']}")
-            return Div(
-                history_script,
-                Div(
-                    Strong("SQL Error: ", cls="font-bold"),
-                    P(execution_results["error"], cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
-                    cls="p-4 bg-red-50 text-red-700 rounded-lg"
-                ),
-                cls="single-query-result"
-            )
+            return Div(ErrorDiv(Strong("SQL Error: "), P(execution_results["error"])))
         
         # Process results similar to run_query function
         # Limit display to 100 rows for performance
@@ -1000,7 +798,6 @@ async def translate_query_endpoint(request):
         if not display_data:
             print("Query returned no results")
             return Div(
-                history_script,
                 Div(
                     Strong("Query completed ", cls="font-bold"),
                     Span(f"in {execution_time:.2f}s"),
@@ -1061,10 +858,9 @@ async def translate_query_endpoint(request):
         
         # Build final response using the same format as regular SQL queries
         return Div(
-            history_script,
             Div(
                 Div(
-                    Strong("Query successful ", cls="font-bold"),
+                    Strong("Query successful "),
                     Span(f"({execution_time:.2f}s)"),
                     cls="text-green-700"
                 ),
