@@ -117,6 +117,21 @@ def execute_query(query):
 # Initialize the app with MonsterUI theme
 app, rt = fast_app(hdrs=(*Theme.blue.headers(), Link(href='styles.css', rel="stylesheet"), Script(src='index.js')))
 
+def get_table_sidebar_component(table_name):
+    return Div(
+            DivFullySpaced(
+                Strong(table_name),
+                Div(f"{len(get_table_schema(table_name))} columns", cls="column-count"),
+            cls="table-header",
+            id=f"table-header-{table_name}",
+            onclick=f"toggleSchema('{table_name}')"),
+            
+        # Schema container - hidden by default
+        Div(get_table_schema_component(table_name),
+            cls="schema-container",
+            id=f"schema-{table_name}"),
+        cls="table-item")
+
 @rt('/')
 def index():
     """Main page with SQL editor"""
@@ -150,50 +165,22 @@ def index():
                             Div(
                                 # Database Tables section
                                 Div(
-                                    # Header
-                                    Div(
-                                        H3("Database Tables", cls="text-lg font-semibold"),
-                                        P(f"{len(tables)} tables available", cls="text-xs text-gray-500"),
-                                        cls="sidebar-section-heading"
-                                    ),
+                                    DivFullySpaced(
+                                        Strong("Database Tables"),
+                                        Subtitle(f"{len(tables)} tables available"),
+                                        cls='p-2'),
                                     # Table list with inline schemas
-                                    Div(
-                                        *[Div(
-                                            # Table header - clickable with toggle indicator
-                                            Div(
-                                                Div(
-                                                    Strong(table, cls="block text-gray-800"),
-                                                    Span(f"{len(get_table_schema(table))} columns", cls="column-count")
-                                                ),
-                                                Span("›", cls="toggle-indicator", id=f"toggle-{table}"),
-                                                cls="table-header",
-                                                id=f"table-header-{table}",
-                                                onclick=f"toggleSchema('{table}')"
-                                            ),
-                                            # Schema container - hidden by default
-                                            Div(
-                                                get_table_schema_component(table),
-                                                cls="schema-container",
-                                                id=f"schema-{table}"
-                                            ),
-                                            cls="table-item"
-                                        ) for table in tables],
-                                        cls="schema-section"
-                                    ),
-                                    cls="border rounded-lg overflow-hidden bg-white shadow-sm h-full"
-                                ),
-                                cls="left-panels"
-                            ),
+                                    Div(*[get_table_sidebar_component(table_name) for table_name in tables], cls="schema-section"),
+                                    cls="border rounded-lg overflow-hidden bg-white shadow-sm h-full"),
+                                cls="left-panels"),
                             cls="sidebar"
                         ),
                         
                         # SQL editor
                         Card(
-                            Div(
-                                H3("SQL Query", cls="text-lg font-semibold"),
-                                P("Write your SQL query below", cls="text-sm text-gray-500"),
-                                cls="flex justify-between items-center mb-3"
-                            ),
+                            DivFullySpaced(
+                                H5("SQL Query"),
+                                Subtitle("Write your SQL query below")),
                             
                             # Add mode toggle container
                             Div(
@@ -300,7 +287,7 @@ def index():
                     UploadZone(DivCentered(Span("Upload Zone"), UkIcon("upload")), id='db_file', name='db_file', accept=".duckdb,.db"),
                     Button("Connect", type="submit", id="upload-btn", cls=ButtonT.primary),
                     id='change-database-modal'),
-                    
+
             cls="mx-auto px-4 sm:px-6 lg:px-8 max-w-full w-[98%] container")
     
     
@@ -1111,11 +1098,10 @@ async def translate_query_endpoint(request):
         print(traceback.format_exc())
         
         return Div(
-            Strong("Application Error: ", cls="font-bold"),
+            Strong("Application Error: "),
             P(f"An unexpected error occurred: {str(e)}", 
               cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
-            cls="p-4 bg-red-50 text-red-700 rounded-lg"
-        )
+            cls=TextT.error)
 
 if __name__ == "__main__":
     # Register cleanup function to run on exit
