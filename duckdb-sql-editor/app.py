@@ -13,95 +13,21 @@ from fasthtml.common import *
 from monsterui.all import *
 from db import DB_PATH, db, DatabaseManager, cleanup_resources
 import json
-import datetime
 import time
 # Load environment variables
 load_dotenv()
 
 db = DatabaseManager()
 
-def ErrorDiv(*args, **kwargs):
-    return Div(*args, cls="p-4 bg-red-50 text-red-700 rounded-lg", **kwargs)
+def ErrorDiv(*args, **kwargs): return Div(*args, cls="p-4 bg-red-50 text-red-700 rounded-lg", **kwargs)
 
-def with_db_connection(default_value=None):
-    """Decorator to handle database connections and error handling
-    Args:
-        default_value: Value to return if operation fails (default: None)
-    """
-    def decorator(func):
-        def wrapper(*args, **kwargs):
-            db.connect(DB_PATH)
-            try:
-                result = func(*args, **kwargs)
-                return result
-            except Exception as e:
-                print(f"Error in {func.__name__}: {e}")
-                return default_value
-        return wrapper
-    return decorator
-
-@with_db_connection(default_value=[])
-def get_table_names():
-    """Get a list of table names from the database"""
-    tables = db.connection.execute("SHOW TABLES").fetchall()
-    return [table[0] for table in tables]
-
-@with_db_connection(default_value=[])
-def get_table_schema(table_name):
-    """Get the schema for a specific table"""
-    print(f"Fetching schema for table: {table_name}")
-    schema = db.connection.execute(f"DESCRIBE {table_name}").fetchall()
-    print(f"Schema for {table_name}: {len(schema)} columns")
-    return schema
-
-def execute_query(query):
-    """Execute a SQL query and return the results"""
-    def get_results(connection):
-        """Helper to execute query and get results with column names"""
-        result = connection.execute(query).fetchall()
-        columns = []
-        if connection.description is not None:
-            columns = [col[0] for col in connection.description]
-        return {"columns": columns, "data": result}
-
-    db.connect(DB_PATH)
-    try:
-        print(f"Executing query: {query[:100]}...")
-        return get_results(db.connection)
-
-    except (duckdb.ConnectionException, duckdb.IOException) as conn_error:
-        # Handle connection-specific issues
-        print(f"Connection error: {conn_error}")
-        print("Attempting to reset connection...")
-        
-        if db.reset_connection():
-            try:
-                db.connect(DB_PATH)
-                print("Retrying query after connection reset...")
-                return get_results(db.connection)
-            except duckdb.Error as retry_error:
-                print(f"Retry failed: {retry_error}")
-                return {"error": f"Query failed after connection reset: {retry_error}", "columns": [], "data": []}
-        return {"error": f"Database connection error: {conn_error}", "columns": [], "data": []}
-
-    except duckdb.Error as query_error:
-        # Handle query-specific errors (syntax errors, etc.)
-        print(f"Query error: {query_error}")
-        return {"error": str(query_error), "columns": [], "data": []}
-
-    except Exception as unexpected_error:
-        # Handle any unexpected errors not covered by DuckDB exceptions
-        print(f"Unexpected error: {unexpected_error}")
-        return {"error": f"An unexpected error occurred: {unexpected_error}", "columns": [], "data": []}
-
-# Initialize the app with MonsterUI theme
 app, rt = fast_app(hdrs=(*Theme.blue.headers(), Link(href='styles.css', rel="stylesheet"), Script(src='index.js')))
 
 def get_table_sidebar_component(table_name):
     return Div(
             DivFullySpaced(
                 Strong(table_name),
-                Div(f"{len(get_table_schema(table_name))} columns", cls="column-count"),
+                Div(f"{len(db.get_table_schema(table_name))} columns", cls="column-count"),
             cls="table-header",
             id=f"table-header-{table_name}",
             onclick=f"toggleSchema('{table_name}')"),
@@ -115,12 +41,12 @@ def get_table_sidebar_component(table_name):
 @rt('/')
 def index():
     """Main page with SQL editor"""
-    tables = get_table_names()
+    tables = db.get_table_names()
     print(f"Loaded {len(tables)} tables from database")
     
     # Pre-load schemas for all tables
     for table in tables:
-        schema = get_table_schema(table)
+        schema = db.get_table_schema(table)
         print(f"Pre-loaded schema for {table}: {len(schema)} columns")
     
     return Container(
@@ -152,8 +78,7 @@ def index():
                                     # Table list with inline schemas
                                     Div(*[get_table_sidebar_component(table_name) for table_name in tables], cls="schema-section"),
                                     cls="border rounded-lg overflow-hidden bg-white shadow-sm h-full"),
-                                cls="left-panels"),
-                            cls="sidebar"
+                                ),
                         ),
                         
                         # SQL editor
@@ -278,7 +203,7 @@ def get_table_schema_component(table_name):
         return P("Invalid table name", cls="text-red-500 text-sm")
     
     try:
-        schema = get_table_schema(table_name)
+        schema = db.get_table_schema(table_name)
         if not schema:
             return P(f"No schema found for table: {table_name}", cls="text-red-500 text-sm")
         
@@ -310,30 +235,20 @@ def table_info(table_name):
     if not table_name:
         return Div(P("Invalid table name", cls="text-red-500"))
     
-    schema = get_table_schema(table_name)
+    schema = db.get_table_schema(table_name)
     
     return Div(
         Div(
             H4(f"Schema for: {table_name}", cls="text-lg font-semibold"),
-            Button("Query Table", 
-                   cls=ButtonT.secondary + " text-sm px-3 py-1", 
-                   hx_on=f"click: document.getElementById('sql-query').value = `SELECT * FROM {table_name} LIMIT 10;`; updateLineNumbers()"),
+            Button(
+                "Query Table", 
+                cls=ButtonT.secondary + " text-sm px-3 py-1", 
+                hx_on=f"click: document.getElementById('sql-query').value = `SELECT * FROM {table_name} LIMIT 10;`; updateLineNumbers()"
+            ),
             cls="flex justify-between items-center mb-3"
         ),
         Div(
-            Table(
-                Thead(Tr(*[Th(col, cls="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider") 
-                            for col in ["Column Name", "Type", "Nullable"]])),
-                Tbody(*[Tr(
-                        Td(col[0], cls="px-4 py-2 whitespace-nowrap font-medium text-gray-900"),
-                        Td(col[1], cls="px-4 py-2 whitespace-nowrap font-mono text-xs text-gray-600 bg-gray-50"),
-                        Td("Yes" if col[3] else "No", 
-                           cls=f"px-4 py-2 whitespace-nowrap text-sm {'text-green-600' if col[3] else 'text-red-600'}")
-                       ) for col in schema],
-                      cls="divide-y divide-gray-200"
-                ),
-                cls="min-w-full divide-y divide-gray-200 table-fixed"
-            ),
+            make_schema_table(schema),
             cls="shadow overflow-hidden border-b border-gray-200 sm:rounded-lg bg-white"
         ),
         P("Click a column name to copy it to the query editor", cls="text-xs text-gray-500 mt-2"),
@@ -391,18 +306,11 @@ async def run_query(request):
         timestamp = datetime.datetime.now().strftime("%H:%M:%S")
         
         print("About to execute query...")
-        results = execute_query(query)
+        results = db.execute_query(query)
         print("Query executed, processing results...")
         
         # Calculate execution time
         execution_time = time.time() - start_time
-        
-        # Properly escape the query for JavaScript
-        # Use JSON encoding which handles all the escaping for us
-        escaped_query = json.dumps(query)
-        
-        # JavaScript to add query to history and ensure form functionality persists
-        
         if "error" in results:
             print(f"Query error: {results['error']}")
             return Div(ErrorDiv(Strong("SQL Error: "), P(results["error"])), cls="single-query-result")
@@ -477,21 +385,14 @@ async def run_query(request):
                 ),
                 Div(
                     Span(f"Showing {len(display_data)} of {total_rows} rows", 
-                       cls="text-sm text-gray-500"),
+                        cls="text-sm text-gray-500"),
                     cls="mt-1"
                 ),
                 cls="mb-4 p-3 bg-green-50 rounded-lg"
             ),
             Div(
                 Div(
-                    Table(
-                        Thead(
-                            Tr(*[Th(col, cls="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider") 
-                                for col in results["columns"]])
-                        ),
-                        Tbody(*rows, cls="bg-white divide-y divide-gray-200"),
-                        cls="min-w-full divide-y divide-gray-200 result-table"
-                    ),
+                    make_query_results_table(results, display_data),
                     cls="table-wrapper"
                 ),
                 cls="shadow border-b border-gray-200 rounded-lg"
@@ -866,21 +767,14 @@ async def translate_query_endpoint(query:str):
                 ),
                 Div(
                     Span(f"Showing {len(display_data)} of {total_rows} rows", 
-                       cls="text-sm text-gray-500"),
+                        cls="text-sm text-gray-500"),
                     cls="mt-1"
                 ),
                 cls="mb-4 p-3 bg-green-50 rounded-lg"
             ),
             Div(
                 Div(
-                    Table(
-                        Thead(
-                            Tr(*[Th(col, cls="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider") 
-                                for col in execution_results["columns"]])
-                        ),
-                        Tbody(*rows, cls="bg-white divide-y divide-gray-200"),
-                        cls="min-w-full divide-y divide-gray-200 result-table"
-                    ),
+                    make_query_results_table(execution_results, display_data),
                     cls="table-wrapper"
                 ),
                 cls="shadow border-b border-gray-200 rounded-lg"
@@ -898,6 +792,70 @@ async def translate_query_endpoint(query:str):
             P(f"An unexpected error occurred: {str(e)}", 
               cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
             cls=TextT.error)
+
+# Table styling constants
+class TableStyle:
+    BASE = "min-w-full divide-y divide-gray-200"
+    FIXED = BASE + " table-fixed"
+    RESULT = BASE + " result-table"
+
+class CellStyle:
+    BASE = "px-4 py-2 whitespace-nowrap"
+    TEXT = BASE + " text-sm text-gray-900"
+    TRUNCATE = TEXT + " truncate max-w-[300px]"
+    HEADER = BASE + " text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+    MONO = BASE + " font-mono text-xs text-gray-600 bg-gray-50"
+    BOLD = BASE + " font-medium text-gray-900"
+
+def make_json_cell(value: str, column_name: str) -> Td:
+    """Create a table cell for JSON data with prettify and explore options"""
+    return Td(
+        Div(
+            Div(
+                Span(truncate_text(value, 50), cls="json-text"),
+                Span("JSON", cls="json-badge"),
+                cls="cursor-pointer",
+                onclick=f"toggleJsonPrettify(this)"),
+            Div(cls="json-prettified", style="display: none;"),
+            Button(
+                "Explore JSON",
+                cls="mt-2 text-xs bg-blue-50 text-blue-600 px-2 py-1 rounded border border-blue-200 hover:bg-blue-100",
+                onclick=f"openJsonExplorer({json.dumps(value)}, '{column_name}')"),
+            data_json=value,
+            cls="json-cell p-2"),
+        cls=CellStyle.TEXT)
+
+def make_query_results_table(results: dict, display_data: list) -> Table:
+    """Create a table component for query results using MonsterUI Table"""
+    def cell_render(key: str, value: Any) -> Td:
+        value_str = str(value)
+        return make_json_cell(value_str, key) if is_json(value_str) else Td(value_str, cls=CellStyle.TRUNCATE)
+    
+    return TableFromDicts(
+        header_data=results["columns"],
+        body_data=[dict(zip(results["columns"], row)) for row in display_data],
+        header_cell_render=lambda col: Th(col, cls=CellStyle.HEADER),
+        body_cell_render=cell_render,
+        cls=TableStyle.RESULT)
+
+def make_schema_table(schema: list) -> Table:
+    """Create a table component for schema display using MonsterUI Table"""    
+    def cell_render(key: str, value: Any) -> Td:
+        match key.lower():
+            case "column name": return Td(value, cls=CellStyle.BOLD)
+            case "type": return Td(value, cls=CellStyle.MONO)
+            case "nullable":
+                is_nullable = value == "Yes"
+                return Td(value, cls=f"{CellStyle.TEXT} {'text-green-600' if is_nullable else 'text-red-600'}")
+    
+    body_data = [
+        {"Column Name": col[0], "Type": col[1], "Nullable": "Yes" if col[3] else "No"}
+        for col in schema]
+    
+    return TableFromDicts(header_data=["Column Name", "Type", "Nullable"], 
+                          body_data=body_data,
+                          body_cell_render=cell_render, 
+                          cls=TableStyle.FIXED)
 
 if __name__ == "__main__":
     # Register cleanup function to run on exit
