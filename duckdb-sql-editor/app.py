@@ -509,7 +509,7 @@ async def change_database_endpoint(request):
 
 def get_database_schema_info():
     """Get comprehensive schema information for all tables to inform AI translation"""
-    tables = get_table_names()
+    tables = db.get_table_names()
     schema_info = {}
     
     # Process all tables
