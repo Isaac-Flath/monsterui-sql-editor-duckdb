@@ -1,24 +1,5 @@
-body {
-    min-height: 100vh;
-    display: flex;
-    flex-direction: column;
-}
 
-main {
-    flex: 1;
-}
-.footer {
-    margin-top: auto;
-    padding: 1rem 0;
-    background-color: white;
-    border-top: 1px solid #e5e7eb;
-    width: 100%;
-}
-.container {
-    display: flex;
-    flex-direction: column;
-    min-height: 100vh;
-}
+
 .sql-editor {
     font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', monospace;
     line-height: 1.5;
@@ -98,22 +79,7 @@ form.nl-mode .line-numbers {
 .with-line-numbers {
     padding-left: 50px !important;
 }
-.table-item {
-    border-left: 3px solid transparent;
-    transition: all 0.2s;
-}
-.table-item:hover {
-    border-left-color: #3b82f6;
-    background-color: #eff6ff;
-}
-.table-item.active {
-    border-left-color: #3b82f6;
-    background-color: #eff6ff;
-}
-.table-list {
-    border-radius: 0.375rem;
-    overflow: hidden;
-}
+
 .result-container {
     box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
     border-radius: 0.375rem;
@@ -133,57 +99,11 @@ form.nl-mode .line-numbers {
     width: 100%;
     table-layout: auto;
 }
-.table-wrapper {
-    width: 100%;
-    overflow-x: auto;
-    padding-bottom: 8px;
-}
+
 .header-actions {
     display: flex;
     align-items: center;
     gap: 8px;
-}
-.schema-container {
-    max-height: 0;
-    overflow: hidden;
-    transition: max-height 0.3s ease-out, opacity 0.2s ease-out;
-    opacity: 0;
-    margin-left: 12px;
-    margin-right: 12px;
-    border-left: 2px solid #e5e7eb;
-}
-.schema-container.open {
-    max-height: 500px;
-    opacity: 1;
-    padding-left: 10px;
-    margin-top: 5px;
-    margin-bottom: 10px;
-}
-.query-history-item {
-    cursor: pointer;
-    transition: all 0.2s;
-}
-.query-history-item:hover {
-    background-color: #f3f4f6;
-}
-.table-row:hover {
-    background-color: #f3f4f6;
-}
-.table-header {
-    padding: 10px 12px;
-    cursor: pointer;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    border-radius: 4px;
-    transition: all 0.2s;
-    position: relative;
-}
-.table-header:hover {
-    background-color: #f3f4f6;
-}
-.table-header.active {
-    background-color: #ebf5ff;
 }
 .toggle-indicator {
     display: inline-block;
@@ -279,11 +199,6 @@ form.nl-mode .line-numbers {
     border-radius: 10px;
     margin-left: 5px;
 }
-.main-layout {
-    display: flex;
-    flex-direction: column;
-    gap: 16px;
-}
 .editor-row {
     display: flex;
     gap: 16px;
@@ -303,18 +218,6 @@ form.nl-mode .line-numbers {
 .history-container {
     margin-top: 16px;
     width: 100%;
-}
-.sidebar-section {
-    margin-bottom: 16px;
-}
-.sidebar-section-heading {
-    font-weight: 600;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 8px 12px;
-    background-color: #f9fafb;
-    border-bottom: 1px solid #e5e7eb;
 }
 /* JSON related styles */
 .json-cell {
@@ -447,16 +350,6 @@ form.nl-mode .line-numbers {
 }
 .json-copy-btn:hover {
     background-color: #e0f2fe;
-}
-.close-modal-btn {
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 0.25rem;
-    background-color: #f1f5f9;
-    border: none;
-}
-.close-modal-btn:hover {
-    background-color: #e2e8f0;
 }
 /* Tabs styling for query history */
 .query-tabs {

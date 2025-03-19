@@ -5,7 +5,7 @@
 DuckDB SQL Editor with FastHTML and MonsterUI
 """
 
-import os, json, duckdb, requests, atexit
+import os, json, requests, atexit
 from pathlib import Path
 from dotenv import load_dotenv
 from fasthtml import serve
@@ -25,18 +25,21 @@ app, rt = fast_app(hdrs=(*Theme.blue.headers(), Link(href='styles.css', rel="sty
 
 def get_table_sidebar_component(table_name):
     return Div(
-            DivFullySpaced(
-                Strong(table_name),
-                Div(f"{len(db.get_table_schema(table_name))} columns", cls="column-count"),
-            cls="table-header",
-            id=f"table-header-{table_name}",
-            onclick=f"toggleSchema('{table_name}')"),
-            
-        # Schema container - hidden by default
-        Div(get_table_schema_component(table_name),
-            cls="schema-container",
-            id=f"schema-{table_name}"),
-        cls="table-item")
+        Div(
+            # Table header with toggle
+            Div(
+                DivFullySpaced(
+                    Strong(table_name, cls=TextT.gray),
+                    Subtitle(f"{len(db.get_table_schema(table_name))} columns", cls=TextT.xs),
+                    cls="px-3 py-2 hover:bg-gray-50 cursor-pointer",
+                    data_uk_toggle=f"target: #schema-{table_name}"),
+                cls="border-b"),
+            # Schema container - hidden by default
+            Div(get_table_schema_component(table_name),
+                cls="p-2 bg-gray-50",
+                id=f"schema-{table_name}",
+                hidden=True),
+            cls="bg-white"))
 
 @rt('/')
 def index():
@@ -67,19 +70,13 @@ def index():
                     Div(
                         # Left sidebar with database tables (moved to first position)
                         Div(
-                            # Left panels container
-                            Div(
-                                # Database Tables section
-                                Div(
-                                    DivFullySpaced(
-                                        Strong("Database Tables"),
-                                        Subtitle(f"{len(tables)} tables available"),
-                                        cls='p-2'),
-                                    # Table list with inline schemas
-                                    Div(*[get_table_sidebar_component(table_name) for table_name in tables], cls="schema-section"),
-                                    cls="border rounded-lg overflow-hidden bg-white shadow-sm h-full"),
-                                ),
-                        ),
+                            DivFullySpaced(
+                                Strong("Database Tables"),
+                                Subtitle(f"{len(tables)} tables available"),
+                                cls='p-2'),
+                            # Table list with inline schemas
+                            Div(*[get_table_sidebar_component(table_name) for table_name in tables], cls="schema-section"),
+                            cls="border rounded-lg overflow-hidden bg-white shadow-sm h-full"),
                         
                         # SQL editor
                         Card(
@@ -148,33 +145,19 @@ def index():
                         cls="editor-row mb-2" # Reduced margin bottom here
                     ),
                     
-                    # Second row with query results (full width)
-                    Div(
                         # Query results with tabs
-                        Card(
-                            Div(
-                                H3("Query Results", cls="text-lg font-semibold"),
-                                cls="flex justify-between items-center mb-3"
-                            ),
-                            # Tabs for query history
-                            Div(
-                                id="query-tabs",
-                                cls="query-tabs"
-                            ),
-                            # Hidden message for when no queries exist
-                            P("No queries yet. Execute a query to start building history.", 
-                              cls="text-sm text-gray-500 p-2 mx-2",
-                              id="no-queries-message"),
-                            # Query results container
-                            Div(
-                                id="query-results", 
-                                cls="bg-white result-container query-result-panel p-4"
-                            ),
-                            cls="shadow-sm"
-                        ),
-                        cls="results-row flex-grow" # Added flex-grow to take up remaining space
-                    ),
-                    cls="main-layout"
+                    Card(
+                        Div(H3("Query Results", cls="text-lg font-semibold"),
+                            cls="flex justify-between items-center mb-3"),
+                        # Tabs for query history
+                        Div(id="query-tabs", cls="query-tabs"),
+                        # Hidden message for when no queries exist
+                        Subtitle("No queries yet. Execute a query to start building history.", 
+                            cls=TextT.sm, id="no-queries-message"),
+                        # Query results container
+                        Div(id="query-results", 
+                            cls="bg-white result-container query-result-panel p-4")),
+                    cls="flex flex-col gap-4"
                 ),
                 cls="flex-1"
             ),
@@ -184,18 +167,14 @@ def index():
                 Div(Subtitle("Built with FastHTML, MonsterUI and DuckDB"),),
                 DivRAligned(UkIconLink("github", href="https://github.com/AnswerDotAI/MonsterUI"),
                             UkIconLink("database", href="https://duckdb.org/docs/")),
-                cls="p-4 footer"),
-            
+                cls="p-4 border-t border-gray-200"),
                 Modal(
                     H3("Connect to a DuckDB Database", cls="text-lg font-semibold"),
                     ModalCloseButton(),
                     UploadZone(DivCentered(Span("Upload Zone"), UkIcon("upload")), id='db_file', name='db_file', accept=".duckdb,.db"),
                     Button("Connect", type="submit", id="upload-btn", cls=ButtonT.primary),
                     id='change-database-modal'),
-
-            cls="mx-auto px-4 sm:px-6 lg:px-8 max-w-full w-[98%] container")
-    
-    
+            cls="max-w-full w-[98%] min-h-screen flex flex-col")
 
 def get_table_schema_component(table_name):
     """Generate a component showing the schema for a table"""
@@ -393,7 +372,6 @@ async def run_query(request):
             Div(
                 Div(
                     make_query_results_table(results, display_data),
-                    cls="table-wrapper"
                 ),
                 cls="shadow border-b border-gray-200 rounded-lg"
             ),
@@ -775,7 +753,6 @@ async def translate_query_endpoint(query:str):
             Div(
                 Div(
                     make_query_results_table(execution_results, display_data),
-                    cls="table-wrapper"
                 ),
                 cls="shadow border-b border-gray-200 rounded-lg"
             ),
@@ -793,19 +770,6 @@ async def translate_query_endpoint(query:str):
               cls="mt-2 font-mono text-sm p-3 bg-red-100 rounded overflow-x-auto"),
             cls=TextT.error)
 
-# Table styling constants
-class TableStyle:
-    BASE = "min-w-full divide-y divide-gray-200"
-    FIXED = BASE + " table-fixed"
-    RESULT = BASE + " result-table"
-
-class CellStyle:
-    BASE = "px-4 py-2 whitespace-nowrap"
-    TEXT = BASE + " text-sm text-gray-900"
-    TRUNCATE = TEXT + " truncate max-w-[300px]"
-    HEADER = BASE + " text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-    MONO = BASE + " font-mono text-xs text-gray-600 bg-gray-50"
-    BOLD = BASE + " font-medium text-gray-900"
 
 def make_json_cell(value: str, column_name: str) -> Td:
     """Create a table cell for JSON data with prettify and explore options"""
@@ -823,30 +787,28 @@ def make_json_cell(value: str, column_name: str) -> Td:
                 onclick=f"openJsonExplorer({json.dumps(value)}, '{column_name}')"),
             data_json=value,
             cls="json-cell p-2"),
-        cls=CellStyle.TEXT)
+        )
 
 def make_query_results_table(results: dict, display_data: list) -> Table:
     """Create a table component for query results using MonsterUI Table"""
     def cell_render(key: str, value: Any) -> Td:
         value_str = str(value)
-        return make_json_cell(value_str, key) if is_json(value_str) else Td(value_str, cls=CellStyle.TRUNCATE)
+        return make_json_cell(value_str, key) if is_json(value_str) else Td(value_str)
     
     return TableFromDicts(
         header_data=results["columns"],
         body_data=[dict(zip(results["columns"], row)) for row in display_data],
-        header_cell_render=lambda col: Th(col, cls=CellStyle.HEADER),
-        body_cell_render=cell_render,
-        cls=TableStyle.RESULT)
+        body_cell_render=cell_render,)
 
 def make_schema_table(schema: list) -> Table:
     """Create a table component for schema display using MonsterUI Table"""    
     def cell_render(key: str, value: Any) -> Td:
         match key.lower():
-            case "column name": return Td(value, cls=CellStyle.BOLD)
-            case "type": return Td(value, cls=CellStyle.MONO)
+            case "column name": return Td(value)
+            case "type": return Td(value,)
             case "nullable":
                 is_nullable = value == "Yes"
-                return Td(value, cls=f"{CellStyle.TEXT} {'text-green-600' if is_nullable else 'text-red-600'}")
+                return Td(value, cls=f"{'text-green-600' if is_nullable else 'text-red-600'}")
     
     body_data = [
         {"Column Name": col[0], "Type": col[1], "Nullable": "Yes" if col[3] else "No"}
@@ -854,8 +816,8 @@ def make_schema_table(schema: list) -> Table:
     
     return TableFromDicts(header_data=["Column Name", "Type", "Nullable"], 
                           body_data=body_data,
-                          body_cell_render=cell_render, 
-                          cls=TableStyle.FIXED)
+                          body_cell_render=cell_render,
+                          )
 
 if __name__ == "__main__":
     # Register cleanup function to run on exit
